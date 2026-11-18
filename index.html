@@ -104,7 +104,8 @@
 
   /* Other screens */
   .title { font-size: 24px; font-weight: normal; color: var(--rose); }
-  .big { margin-top: 18px; font-size: 22px; line-height: 1.6; }
+  .label { margin-top: 18px; font-size: 14px; color: var(--soft); letter-spacing: 0.02em; }
+  .big { margin-top: 8px; font-size: 22px; line-height: 1.6; }
   .nav {
     display: flex;
     justify-content: space-between;
@@ -187,10 +188,13 @@
     <p class="hint">tap the photo for another</p>
   </main>
 
-  <!-- SCREEN 2: time together, counting up to seconds -->
+  <!-- SCREEN 2: time together and time since we first talked -->
   <section class="card screen hidden" id="screen2">
     <h2 class="title">Time together</h2>
+    <p class="label">Since we started dating</p>
     <p class="big" id="together"></p>
+    <p class="label">Since we first talked</p>
+    <p class="big" id="talked"></p>
     <div class="nav">
       <button class="btn ghost" onclick="showScreen('screen1')">Back</button>
       <button class="btn" onclick="showScreen('screen3')">Next</button>
@@ -208,12 +212,12 @@
   </section>
 
   <!-- SCREEN 4: question of the day. She types an answer,
-       and it's saved on her phone. -->
+       it's saved on her phone and sent to yours. -->
   <section class="card screen hidden" id="screen4">
     <h2 class="title">Question of the day</h2>
     <p class="caption" id="question"></p>
     <textarea id="answer" placeholder="Type your answer ♥"></textarea>
-    <button class="btn" onclick="saveAnswer()" style="margin-top: 12px;">Save</button>
+    <button class="btn" onclick="saveAnswer()" style="margin-top: 12px;">Save & send</button>
     <p class="hint" id="saveMsg"></p>
     <div class="nav">
       <button class="btn ghost" onclick="showScreen('screen3')">Back</button>
@@ -237,13 +241,16 @@
     { src: "photos/4.jpg", caption: "I am so grateful to have you, love." }
   ];
 
-  // Start date for the "time together" counter. Format: YYYY-MM-DD
-  const TOGETHER_SINCE = "2026-11-04";
+  // Date and time you started dating. Format: YYYY-MM-DDTHH:MM:SS (24-hour)
+  const TOGETHER_SINCE = "2025-11-04T18:30:00"; // 6:30 PM, 11/4/25
+
+  // Date and time you first talked. Same format.
+  const FIRST_TALKED = "2025-09-09T20:28:00";
 
   // Footer text under the photo. Leave "" to show "X days together" instead.
   const FOOTER = "I love you";
 
-  // Next plan together. Format: new Date("YYYY-MM-DDTHH:MM:SS")
+  // Next plan together. Format: YYYY-MM-DDTHH:MM:SS
   const NEXT_DATE = new Date("2026-11-27T19:00:00");
   // Label shown above the countdown
   const NEXT_DATE_LABEL = "Our next movie night";
@@ -259,6 +266,11 @@
     "What does a dream trip look like to u with me?"
   ];
 
+  // ntfy topic for sending her answers to your phone.
+  // Use a long, hard-to-guess name (anyone who knows it can read the messages).
+  // Install the free ntfy app on your phone and subscribe to this same name.
+  const NTFY_TOPIC = "elisesgithubthingy";
+
   /* ============================================================ */
 
   const img = document.getElementById("photo");
@@ -267,6 +279,7 @@
   const footerEl = document.getElementById("footer");
   const screen1 = document.getElementById("screen1");
   const togetherEl = document.getElementById("together");
+  const talkedEl = document.getElementById("talked");
   const countdownEl = document.getElementById("countdown");
   const nextDateLabelEl = document.getElementById("nextDateLabel");
   const questionEl = document.getElementById("question");
@@ -315,9 +328,7 @@
   });
 
   function daysTogether() {
-    const start = new Date(TOGETHER_SINCE + "T00:00:00");
-    const now = new Date();
-    return Math.max(0, Math.floor((now - start) / 86400000));
+    return Math.max(0, Math.floor((new Date() - new Date(TOGETHER_SINCE)) / 86400000));
   }
 
   function sparkleAt(x, y) {
@@ -350,15 +361,19 @@
   }
   screen1.addEventListener("click", onPhotoTap);
 
-  // Time together: years are not shown, just days, hours, minutes, seconds
-  function updateTogether() {
-    const start = new Date(TOGETHER_SINCE + "T00:00:00");
-    let diff = Math.max(0, Math.floor((new Date() - start) / 1000));
+  // Turns a start date and time into "X days, X hours, X minutes, X seconds"
+  function formatSince(startString) {
+    let diff = Math.max(0, Math.floor((new Date() - new Date(startString)) / 1000));
     const days = Math.floor(diff / 86400); diff %= 86400;
     const hours = Math.floor(diff / 3600); diff %= 3600;
     const mins = Math.floor(diff / 60);
     const secs = diff % 60;
-    togetherEl.textContent = `${days} days, ${hours} hours, ${mins} minutes, ${secs} seconds`;
+    return `${days} days, ${hours} hours, ${mins} minutes, ${secs} seconds`;
+  }
+
+  function updateTogether() {
+    togetherEl.textContent = formatSince(TOGETHER_SINCE);
+    talkedEl.textContent = formatSince(FIRST_TALKED);
   }
 
   // Countdown to NEXT_DATE
@@ -385,9 +400,28 @@
     saveMsgEl.textContent = "";
   }
 
-  function saveAnswer() {
-    try { localStorage.setItem("answer_" + currentQ, answerEl.value); } catch (err) {}
-    saveMsgEl.textContent = "Saved ♥";
+  // Saves her answer on her phone, then sends the question and answer to yours
+  async function saveAnswer() {
+    const text = answerEl.value.trim();
+    if (!text) {
+      saveMsgEl.textContent = "Type something first ♥";
+      return;
+    }
+    try { localStorage.setItem("answer_" + currentQ, text); } catch (err) {}
+
+    saveMsgEl.textContent = "Sending...";
+    try {
+      const res = await fetch("https://ntfy.sh/" + NTFY_TOPIC, {
+        method: "POST",
+        headers: { "Title": "Question of the day" },
+        body: QUESTIONS[currentQ] + "\n\n" + text
+      });
+      saveMsgEl.textContent = res.ok
+        ? "Sent to your phone ♥"
+        : "Saved here, but it didn't send. Try again.";
+    } catch (err) {
+      saveMsgEl.textContent = "Saved here, but it didn't send. Check the connection.";
+    }
   }
 
   function nextQuestion() {
