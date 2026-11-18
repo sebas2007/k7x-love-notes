@@ -234,8 +234,8 @@
 <body>
 <div id="app">
 
-  <!-- SCREEN 1: photos. The first few taps change the photo.
-       After that, a tap opens the "Time together" screen. -->
+  <!-- SCREEN 1: photos. The page shows 3 photos (the first one on load,
+       then one per tap). The next tap opens the "Time together" screen. -->
   <main class="card screen" id="screen1">
     <div class="frame" id="frame">
       <div class="placeholder" id="placeholder">
@@ -274,7 +274,7 @@
     </div>
   </section>
 
-  <!-- SCREEN 4: one question at a time. She types an answer,
+  <!-- SCREEN 4: one question. She types an answer,
        it's saved on her phone and sent to yours. -->
   <section class="card screen hidden" id="screen4">
     <h2 class="title">Question of the day</h2>
@@ -284,7 +284,7 @@
     <p class="hint" id="saveMsg"></p>
     <div class="nav">
       <button class="btn ghost" onclick="showScreen('screen3')">Back</button>
-      <button class="btn" id="nextBtn" onclick="nextQuestion()">Next question</button>
+      <button class="btn" onclick="finishQuestion()">Finish ♥</button>
     </div>
   </section>
 
@@ -320,6 +320,10 @@
     { src: "photos/4.jpg", caption: "I am so grateful to have you, love." }
   ];
 
+  // How many photos she sees per visit (the first one on load counts as 1).
+  // After that, the next tap opens "Time together".
+  const MAX_PHOTOS = 3;
+
   // Date and time you started dating. Format: YYYY-MM-DDTHH:MM:SS (24-hour)
   const TOGETHER_SINCE = "2025-11-04T18:30:00"; // 6:30 PM, 11/4/25
 
@@ -334,17 +338,8 @@
   // Label shown above the countdown
   const NEXT_DATE_LABEL = "Our next movie night";
 
-  // How many taps change the photo before the screens open.
-  // Tap number MAX_PHOTO_TAPS + 1 opens "Time together".
-  const MAX_PHOTO_TAPS = 3;
-
-  // Questions for screen 4. She sees one at a time, in this order.
-  // After the last one, the goodbye screen opens.
-  const QUESTIONS = [
-    "what has been the best experience we've had together in your opinion?",
-    "tell me what our future looks like together(I love hearing you talk about the future it makes me melt hehe)",
-    "What does a dream trip look like to u with me?"
-  ];
+  // The one question for screen 4
+  const QUESTION = "what has been the best experience we've had together in your opinion?";
 
   // Goodbye letter. Write your message here. Line breaks work.
   const GOODBYE_MESSAGE =
@@ -375,7 +370,6 @@ Sebastian ♥`;
   const questionEl = document.getElementById("question");
   const answerEl = document.getElementById("answer");
   const saveMsgEl = document.getElementById("saveMsg");
-  const nextBtn = document.getElementById("nextBtn");
   const envelopeEl = document.getElementById("envelope");
   const letterEl = document.getElementById("letter");
   const goodbyeTextEl = document.getElementById("goodbyeText");
@@ -386,13 +380,8 @@ Sebastian ♥`;
   let last = -1;
   try { last = parseInt(localStorage.getItem("lastPhoto"), 10); } catch (err) {}
 
-  // Counts photo taps. Saved on her phone, so it survives a page reload.
-  // To reset it while testing, delete the "photoTaps" item from localStorage.
-  let photoTaps = 0;
-  try { photoTaps = parseInt(localStorage.getItem("photoTaps"), 10) || 0; } catch (err) {}
-
-  // Which question is showing (0 = first question)
-  let currentQ = 0;
+  // Counts the photos she has seen on this visit (resets each time the page opens)
+  let photosSeen = 1; // the first photo counts as 1
 
   function pickIndex() {
     if (PHOTOS.length <= 1) return 0;
@@ -448,9 +437,8 @@ Sebastian ♥`;
   // Every tap on the photo screen comes here
   function onPhotoTap(e) {
     sparkleAt(e.clientX, e.clientY);
-    photoTaps++;
-    try { localStorage.setItem("photoTaps", String(photoTaps)); } catch (err) {}
-    if (photoTaps <= MAX_PHOTO_TAPS) {
+    if (photosSeen < MAX_PHOTOS) {
+      photosSeen++;
       showPhoto(pickIndex());
     } else {
       showScreen("screen2");
@@ -488,14 +476,13 @@ Sebastian ♥`;
     countdownEl.textContent = `${days} days, ${hours} hours, ${mins} minutes, ${secs} seconds to go`;
   }
 
-  // Shows the current question, her saved answer, and the right button label
+  // Shows the question and her saved answer
   function showQuestion() {
-    questionEl.textContent = QUESTIONS[currentQ];
+    questionEl.textContent = QUESTION;
     let saved = "";
-    try { saved = localStorage.getItem("answer_" + currentQ) || ""; } catch (err) {}
+    try { saved = localStorage.getItem("answer") || ""; } catch (err) {}
     answerEl.value = saved;
     saveMsgEl.textContent = "";
-    nextBtn.textContent = (currentQ === QUESTIONS.length - 1) ? "Finish ♥" : "Next question";
   }
 
   // Saves her answer on her phone, then sends the question and answer to yours
@@ -505,14 +492,14 @@ Sebastian ♥`;
       saveMsgEl.textContent = "Type something first ♥";
       return;
     }
-    try { localStorage.setItem("answer_" + currentQ, text); } catch (err) {}
+    try { localStorage.setItem("answer", text); } catch (err) {}
 
     saveMsgEl.textContent = "Sending...";
     try {
       const res = await fetch("https://ntfy.sh/" + NTFY_TOPIC, {
         method: "POST",
         headers: { "Title": "Question of the day" },
-        body: QUESTIONS[currentQ] + "\n\n" + text
+        body: QUESTION + "\n\n" + text
       });
       saveMsgEl.textContent = res.ok
         ? "Sent to your phone ♥"
@@ -522,15 +509,10 @@ Sebastian ♥`;
     }
   }
 
-  // Moves to the next question. After the last one, opens the goodbye screen.
-  function nextQuestion() {
-    if (currentQ < QUESTIONS.length - 1) {
-      currentQ++;
-      showQuestion();
-    } else {
-      showScreen("screen5");
-      startHearts();
-    }
+  // After the question, go to the goodbye screen
+  function finishQuestion() {
+    showScreen("screen5");
+    startHearts();
   }
 
   // Opens the envelope, then shows the letter
@@ -565,7 +547,7 @@ Sebastian ♥`;
   updateCountdown();
   showQuestion();
 
-  // Start with a random photo
+  // Start with a random photo (this is photo 1 of 3)
   if (PHOTOS.length) {
     const first = pickIndex();
     last = first;
