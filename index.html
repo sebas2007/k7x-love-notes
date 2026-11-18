@@ -30,6 +30,7 @@
     color: var(--ink);
     -webkit-tap-highlight-color: transparent;
     user-select: none;
+    overflow-x: hidden;
   }
   #app {
     width: 100%;
@@ -140,6 +141,56 @@
     user-select: text;
   }
 
+  /* Goodbye screen: envelope and letter */
+  .envelope {
+    position: relative;
+    width: 260px;
+    height: 170px;
+    margin: 26px auto 0;
+    background: #fff;
+    border: 2px solid var(--blush);
+    border-radius: 12px;
+    cursor: pointer;
+    box-shadow: 0 10px 24px rgba(120, 70, 80, 0.15);
+    transition: transform 0.3s ease;
+  }
+  .envelope:hover { transform: translateY(-3px); }
+  .envelope .flap {
+    position: absolute;
+    top: -2px;
+    left: -2px;
+    width: 0;
+    height: 0;
+    border-left: 130px solid transparent;
+    border-right: 130px solid transparent;
+    border-top: 90px solid var(--blush);
+    transform-origin: top center;
+    transition: transform 0.6s ease;
+    z-index: 2;
+  }
+  .envelope.open .flap { transform: rotateX(180deg); }
+  .envelope .seal {
+    position: absolute;
+    left: 50%;
+    top: 60px;
+    transform: translate(-50%, -50%);
+    font-size: 30px;
+    color: var(--rose);
+    animation: beat 1.6s ease-in-out infinite;
+    z-index: 3;
+  }
+  .letter {
+    margin: 22px auto 0;
+    padding: 22px 20px;
+    background: #fffafb;
+    border: 1px solid var(--blush);
+    border-radius: 16px;
+    font-size: 18px;
+    line-height: 1.6;
+    animation: rise 0.8s ease both;
+  }
+  .letter p { white-space: pre-line; }
+
   .sparkle {
     position: fixed;
     pointer-events: none;
@@ -148,23 +199,35 @@
     opacity: 0;
     animation: float 2.2s ease-out forwards;
   }
+  .bg-heart {
+    position: fixed;
+    bottom: -30px;
+    color: var(--rose);
+    opacity: 0.7;
+    pointer-events: none;
+    animation: rise-up 7s linear forwards;
+  }
   @keyframes rise {
     from { opacity: 0; transform: translateY(14px) scale(0.98); }
     to   { opacity: 1; transform: none; }
   }
   @keyframes beat {
-    0%, 100% { transform: scale(1); }
-    15%      { transform: scale(1.12); }
-    30%      { transform: scale(1); }
-    45%      { transform: scale(1.08); }
+    0%, 100% { transform: translate(-50%, -50%) scale(1); }
+    15%      { transform: translate(-50%, -50%) scale(1.12); }
+    30%      { transform: translate(-50%, -50%) scale(1); }
+    45%      { transform: translate(-50%, -50%) scale(1.08); }
   }
   @keyframes float {
     0%   { opacity: 0; transform: translateY(0) scale(0.6); }
     20%  { opacity: 1; }
     100% { opacity: 0; transform: translateY(-120px) scale(1.1); }
   }
+  @keyframes rise-up {
+    from { transform: translateY(0); opacity: 0.7; }
+    to   { transform: translateY(-110vh); opacity: 0; }
+  }
   @media (prefers-reduced-motion: reduce) {
-    .card, .placeholder .heart, .sparkle { animation: none; }
+    .card, .placeholder .heart, .sparkle, .envelope .seal { animation: none; }
   }
 </style>
 </head>
@@ -211,7 +274,7 @@
     </div>
   </section>
 
-  <!-- SCREEN 4: question of the day. She types an answer,
+  <!-- SCREEN 4: one question at a time. She types an answer,
        it's saved on her phone and sent to yours. -->
   <section class="card screen hidden" id="screen4">
     <h2 class="title">Question of the day</h2>
@@ -221,7 +284,23 @@
     <p class="hint" id="saveMsg"></p>
     <div class="nav">
       <button class="btn ghost" onclick="showScreen('screen3')">Back</button>
-      <button class="btn" onclick="nextQuestion()">Next question</button>
+      <button class="btn" id="nextBtn" onclick="nextQuestion()">Next question</button>
+    </div>
+  </section>
+
+  <!-- SCREEN 5: goodbye. Tap the envelope to open the letter. -->
+  <section class="card screen hidden" id="screen5">
+    <h2 class="title">Goodbye for now ♥</h2>
+    <p class="hint">tap the envelope</p>
+    <div class="envelope" id="envelope" onclick="openEnvelope()">
+      <div class="flap"></div>
+      <div class="seal">♥</div>
+    </div>
+    <div class="letter hidden" id="letter">
+      <p id="goodbyeText"></p>
+    </div>
+    <div class="nav">
+      <button class="btn ghost" onclick="showScreen('screen1')">Start over</button>
     </div>
   </section>
 
@@ -259,12 +338,23 @@
   // Tap number MAX_PHOTO_TAPS + 1 opens "Time together".
   const MAX_PHOTO_TAPS = 3;
 
-  // Questions for screen 4. Replace these with your own.
+  // Questions for screen 4. She sees one at a time, in this order.
+  // After the last one, the goodbye screen opens.
   const QUESTIONS = [
     "what has been the best experience we've had together in your opinion?",
     "tell me what our future looks like together(I love hearing you talk about the future it makes me melt hehe)",
     "What does a dream trip look like to u with me?"
   ];
+
+  // Goodbye letter. Write your message here. Line breaks work.
+  const GOODBYE_MESSAGE =
+`I love you more than I can fit into a text.
+
+Thank you for every single day, even the ones we spend apart.
+Can't wait to see you again.
+
+Forever yours,
+Sebastian ♥`;
 
   // ntfy topic for sending her answers to your phone.
   // Use a long, hard-to-guess name (anyone who knows it can read the messages).
@@ -285,6 +375,12 @@
   const questionEl = document.getElementById("question");
   const answerEl = document.getElementById("answer");
   const saveMsgEl = document.getElementById("saveMsg");
+  const nextBtn = document.getElementById("nextBtn");
+  const envelopeEl = document.getElementById("envelope");
+  const letterEl = document.getElementById("letter");
+  const goodbyeTextEl = document.getElementById("goodbyeText");
+
+  goodbyeTextEl.textContent = GOODBYE_MESSAGE;
 
   // Remembers the last photo so the same one doesn't repeat right away
   let last = -1;
@@ -295,7 +391,8 @@
   let photoTaps = 0;
   try { photoTaps = parseInt(localStorage.getItem("photoTaps"), 10) || 0; } catch (err) {}
 
-  let currentQ = Math.floor(Math.random() * QUESTIONS.length);
+  // Which question is showing (0 = first question)
+  let currentQ = 0;
 
   function pickIndex() {
     if (PHOTOS.length <= 1) return 0;
@@ -391,13 +488,14 @@
     countdownEl.textContent = `${days} days, ${hours} hours, ${mins} minutes, ${secs} seconds to go`;
   }
 
-  // Question of the day
+  // Shows the current question, her saved answer, and the right button label
   function showQuestion() {
     questionEl.textContent = QUESTIONS[currentQ];
     let saved = "";
     try { saved = localStorage.getItem("answer_" + currentQ) || ""; } catch (err) {}
     answerEl.value = saved;
     saveMsgEl.textContent = "";
+    nextBtn.textContent = (currentQ === QUESTIONS.length - 1) ? "Finish ♥" : "Next question";
   }
 
   // Saves her answer on her phone, then sends the question and answer to yours
@@ -424,9 +522,41 @@
     }
   }
 
+  // Moves to the next question. After the last one, opens the goodbye screen.
   function nextQuestion() {
-    currentQ = (currentQ + 1) % QUESTIONS.length;
-    showQuestion();
+    if (currentQ < QUESTIONS.length - 1) {
+      currentQ++;
+      showQuestion();
+    } else {
+      showScreen("screen5");
+      startHearts();
+    }
+  }
+
+  // Opens the envelope, then shows the letter
+  function openEnvelope() {
+    if (envelopeEl.classList.contains("open")) return;
+    envelopeEl.classList.add("open");
+    setTimeout(() => {
+      envelopeEl.classList.add("hidden");
+      letterEl.classList.remove("hidden");
+    }, 650);
+  }
+
+  // Floating hearts on the goodbye screen
+  let heartsTimer = null;
+  function spawnHeart() {
+    const h = document.createElement("span");
+    h.className = "bg-heart";
+    h.textContent = Math.random() < 0.5 ? "♥" : "♡";
+    h.style.left = Math.random() * 100 + "vw";
+    h.style.fontSize = (14 + Math.random() * 16) + "px";
+    document.body.appendChild(h);
+    setTimeout(() => h.remove(), 7000);
+  }
+  function startHearts() {
+    if (heartsTimer) return;
+    heartsTimer = setInterval(spawnHeart, 600);
   }
 
   // Update the counters every second
