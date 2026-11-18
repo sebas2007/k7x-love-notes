@@ -29,12 +29,14 @@
     font-family: Georgia, "Times New Roman", serif;
     color: var(--ink);
     -webkit-tap-highlight-color: transparent;
-    cursor: pointer;
     user-select: none;
+  }
+  #app {
+    width: 100%;
+    max-width: 420px;
   }
   .card {
     width: 100%;
-    max-width: 420px;
     background: var(--card);
     border-radius: 28px;
     padding: 18px 18px 26px;
@@ -42,6 +44,10 @@
     text-align: center;
     animation: rise 0.9s ease both;
   }
+  .hidden { display: none; }
+
+  /* Photo screen */
+  #screen1 { cursor: pointer; }
   .frame {
     position: relative;
     width: 100%;
@@ -95,6 +101,44 @@
     font-size: 12px;
     color: #b9a3a7;
   }
+
+  /* Other screens */
+  .title { font-size: 24px; font-weight: normal; color: var(--rose); }
+  .big { margin-top: 18px; font-size: 22px; line-height: 1.6; }
+  .nav {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 26px;
+  }
+  .btn {
+    background: var(--rose);
+    color: #fff;
+    border: none;
+    border-radius: 999px;
+    padding: 10px 22px;
+    font: inherit;
+    cursor: pointer;
+  }
+  .btn.ghost {
+    background: transparent;
+    color: var(--rose);
+    border: 1px solid var(--rose);
+  }
+  textarea {
+    width: 100%;
+    margin-top: 16px;
+    min-height: 110px;
+    border-radius: 16px;
+    border: 1px solid var(--blush);
+    padding: 12px;
+    font: inherit;
+    color: var(--ink);
+    background: #fffafb;
+    resize: vertical;
+    user-select: text;
+  }
+
   .sparkle {
     position: fixed;
     pointer-events: none;
@@ -124,28 +168,68 @@
 </style>
 </head>
 <body>
+<div id="app">
 
-<main class="card" id="card">
-  <div class="frame" id="frame">
-    <div class="placeholder" id="placeholder">
-      <div class="heart">♥</div>
-      <div>add your first photo</div>
+  <!-- SCREEN 1: photos. The first few taps change the photo.
+       After that, a tap opens the "Time together" screen. -->
+  <main class="card screen" id="screen1">
+    <div class="frame" id="frame">
+      <div class="placeholder" id="placeholder">
+        <div class="heart">♥</div>
+        <div>add your first photo</div>
+      </div>
+      <img id="photo" alt="A photo of us">
     </div>
-    <img id="photo" alt="A photo of us">
-  </div>
 
-  <p class="caption" id="caption">Tap for another one.</p>
+    <p class="caption" id="caption">Tap for another one.</p>
 
-  <p class="footer" id="footer"></p>
-  <p class="hint">tap anywhere for another</p>
-</main>
+    <p class="footer" id="footer"></p>
+    <p class="hint">tap the photo for another</p>
+  </main>
+
+  <!-- SCREEN 2: time together, counting up to seconds -->
+  <section class="card screen hidden" id="screen2">
+    <h2 class="title">Time together</h2>
+    <p class="big" id="together"></p>
+    <div class="nav">
+      <button class="btn ghost" onclick="showScreen('screen1')">Back</button>
+      <button class="btn" onclick="showScreen('screen3')">Next</button>
+    </div>
+  </section>
+
+  <!-- SCREEN 3: countdown to your next plan together -->
+  <section class="card screen hidden" id="screen3">
+    <h2 class="title" id="nextDateLabel"></h2>
+    <p class="big" id="countdown"></p>
+    <div class="nav">
+      <button class="btn ghost" onclick="showScreen('screen2')">Back</button>
+      <button class="btn" onclick="showScreen('screen4'); showQuestion();">Next</button>
+    </div>
+  </section>
+
+  <!-- SCREEN 4: question of the day. She types an answer,
+       and it's saved on her phone. -->
+  <section class="card screen hidden" id="screen4">
+    <h2 class="title">Question of the day</h2>
+    <p class="caption" id="question"></p>
+    <textarea id="answer" placeholder="Type your answer ♥"></textarea>
+    <button class="btn" onclick="saveAnswer()" style="margin-top: 12px;">Save</button>
+    <p class="hint" id="saveMsg"></p>
+    <div class="nav">
+      <button class="btn ghost" onclick="showScreen('screen3')">Back</button>
+      <button class="btn" onclick="nextQuestion()">Next question</button>
+    </div>
+  </section>
+
+</div>
 
 <script>
   /* ============================================================
      EDIT THIS PART
-     photos: file names inside the same folder as this page
-     (for example "photos/1.jpg"). Each photo gets its own caption.
      ============================================================ */
+
+  // Photos: file names inside the "photos" folder (lowercase, like "photos/1.jpg").
+  // Each photo gets its own caption. Add more lines to show more photos.
   const PHOTOS = [
     { src: "photos/1.jpg", caption: "I really miss you I hope this makes you happy ♥" },
     { src: "photos/2.jpg", caption: "No idea what this photo is but i hope you like it." },
@@ -153,11 +237,27 @@
     { src: "photos/4.jpg", caption: "I am so grateful to have you, love." }
   ];
 
-  // Start date for the "together" counter. Format: YYYY-MM-DD
+  // Start date for the "time together" counter. Format: YYYY-MM-DD
   const TOGETHER_SINCE = "2026-11-04";
 
-  // Footer text. Leave empty to hide.
+  // Footer text under the photo. Leave "" to show "X days together" instead.
   const FOOTER = "I love you";
+
+  // Next plan together. Format: new Date("YYYY-MM-DDTHH:MM:SS")
+  const NEXT_DATE = new Date("2026-11-27T19:00:00");
+  // Label shown above the countdown
+  const NEXT_DATE_LABEL = "Our next movie night";
+
+  // How many taps change the photo before the screens open.
+  // Tap number MAX_PHOTO_TAPS + 1 opens "Time together".
+  const MAX_PHOTO_TAPS = 3;
+
+  // Questions for screen 4. Replace these with your own.
+  const QUESTIONS = [
+    "what has been the best experience we've had together in your opinion?",
+    "tell me what our future looks like together(I love hearing you talk about the future it makes me melt hehe)",
+    "What does a dream trip look like to u with me?"
+  ];
 
   /* ============================================================ */
 
@@ -165,10 +265,24 @@
   const placeholder = document.getElementById("placeholder");
   const captionEl = document.getElementById("caption");
   const footerEl = document.getElementById("footer");
-  const card = document.getElementById("card");
+  const screen1 = document.getElementById("screen1");
+  const togetherEl = document.getElementById("together");
+  const countdownEl = document.getElementById("countdown");
+  const nextDateLabelEl = document.getElementById("nextDateLabel");
+  const questionEl = document.getElementById("question");
+  const answerEl = document.getElementById("answer");
+  const saveMsgEl = document.getElementById("saveMsg");
 
+  // Remembers the last photo so the same one doesn't repeat right away
   let last = -1;
-  try { last = parseInt(localStorage.getItem("lastPhoto"), 10); } catch (e) {}
+  try { last = parseInt(localStorage.getItem("lastPhoto"), 10); } catch (err) {}
+
+  // Counts photo taps. Saved on her phone, so it survives a page reload.
+  // To reset it while testing, delete the "photoTaps" item from localStorage.
+  let photoTaps = 0;
+  try { photoTaps = parseInt(localStorage.getItem("photoTaps"), 10) || 0; } catch (err) {}
+
+  let currentQ = Math.floor(Math.random() * QUESTIONS.length);
 
   function pickIndex() {
     if (PHOTOS.length <= 1) return 0;
@@ -179,7 +293,7 @@
 
   function showPhoto(i) {
     last = i;
-    try { localStorage.setItem("lastPhoto", String(i)); } catch (e) {}
+    try { localStorage.setItem("lastPhoto", String(i)); } catch (err) {}
     const p = PHOTOS[i];
     captionEl.classList.add("fade");
     img.classList.remove("show");
@@ -216,16 +330,76 @@
     setTimeout(() => s.remove(), 2300);
   }
 
-  card.addEventListener("click", (e) => {
+  // Switches between screens. Only the screen with this id stays visible.
+  function showScreen(id) {
+    document.querySelectorAll(".screen").forEach(s => s.classList.add("hidden"));
+    document.getElementById(id).classList.remove("hidden");
+    window.scrollTo(0, 0);
+  }
+
+  // Every tap on the photo screen comes here
+  function onPhotoTap(e) {
     sparkleAt(e.clientX, e.clientY);
-    showPhoto(pickIndex());
-  });
-  document.body.addEventListener("click", (e) => {
-    if (!card.contains(e.target)) {
-      sparkleAt(e.clientX, e.clientY);
+    photoTaps++;
+    try { localStorage.setItem("photoTaps", String(photoTaps)); } catch (err) {}
+    if (photoTaps <= MAX_PHOTO_TAPS) {
       showPhoto(pickIndex());
+    } else {
+      showScreen("screen2");
     }
-  });
+  }
+  screen1.addEventListener("click", onPhotoTap);
+
+  // Time together: years are not shown, just days, hours, minutes, seconds
+  function updateTogether() {
+    const start = new Date(TOGETHER_SINCE + "T00:00:00");
+    let diff = Math.max(0, Math.floor((new Date() - start) / 1000));
+    const days = Math.floor(diff / 86400); diff %= 86400;
+    const hours = Math.floor(diff / 3600); diff %= 3600;
+    const mins = Math.floor(diff / 60);
+    const secs = diff % 60;
+    togetherEl.textContent = `${days} days, ${hours} hours, ${mins} minutes, ${secs} seconds`;
+  }
+
+  // Countdown to NEXT_DATE
+  function updateCountdown() {
+    nextDateLabelEl.textContent = NEXT_DATE_LABEL;
+    let diff = Math.floor((NEXT_DATE - new Date()) / 1000);
+    if (diff <= 0) {
+      countdownEl.textContent = "It's today! ♥";
+      return;
+    }
+    const days = Math.floor(diff / 86400); diff %= 86400;
+    const hours = Math.floor(diff / 3600); diff %= 3600;
+    const mins = Math.floor(diff / 60);
+    const secs = diff % 60;
+    countdownEl.textContent = `${days} days, ${hours} hours, ${mins} minutes, ${secs} seconds to go`;
+  }
+
+  // Question of the day
+  function showQuestion() {
+    questionEl.textContent = QUESTIONS[currentQ];
+    let saved = "";
+    try { saved = localStorage.getItem("answer_" + currentQ) || ""; } catch (err) {}
+    answerEl.value = saved;
+    saveMsgEl.textContent = "";
+  }
+
+  function saveAnswer() {
+    try { localStorage.setItem("answer_" + currentQ, answerEl.value); } catch (err) {}
+    saveMsgEl.textContent = "Saved ♥";
+  }
+
+  function nextQuestion() {
+    currentQ = (currentQ + 1) % QUESTIONS.length;
+    showQuestion();
+  }
+
+  // Update the counters every second
+  setInterval(() => { updateTogether(); updateCountdown(); }, 1000);
+  updateTogether();
+  updateCountdown();
+  showQuestion();
 
   // Start with a random photo
   if (PHOTOS.length) {
